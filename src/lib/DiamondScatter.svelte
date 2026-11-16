@@ -1,11 +1,12 @@
 <script>
-	import { axisBottom, axisLeft, max, scaleLinear, select } from 'd3';
+	import { axisBottom, axisLeft, interpolatePuOr, max, scaleDiverging, scaleLinear, select } from 'd3';
 
 	let { data } = $props();
-	const clarityRanks = ['I1', 'SI2', 'SI1', 'VS2', 'VS1', 'VVS2', 'VVS1', 'IF'];
-	// One sequential blue ramp, from lowest to highest clarity.
-	const clarityColours = ['#d7e6f5', '#b5d4e9', '#89bedc', '#5aa2cf', '#3383be', '#1764ab', '#084a91', '#08306b'];
-	const colourByClarity = Object.fromEntries(clarityRanks.map((rank, i) => [rank, clarityColours[i]]));
+	const residualLimit = 1.5083;
+	const colourByResidual = scaleDiverging(interpolatePuOr)
+		.domain([-residualLimit, 0, residualLimit]);
+	const legendGradient = `linear-gradient(to right, ${Array.from({ length: 101 }, (_, i) =>
+		`${colourByResidual(-residualLimit + 2 * residualLimit * i / 100)} ${i}%`).join(', ')})`;
 	let containerWidth = $state(960);
 	const height = 560;
 	const margin = { top: 20, right: 24, bottom: 64, left: 80 };
@@ -35,13 +36,15 @@
 		<title id="scatter-title">Diamond price by carat weight</title>
 		<desc id="scatter-description">
 			{data.length.toLocaleString('en-US')} diamonds, with weight in carats on the horizontal axis
-			and price in US dollars on the vertical axis. Marks use a sequential blue ramp from
-			I1 (lowest clarity, lightest) to IF (highest clarity, darkest), at 12% opacity.
+			and price in US dollars on the vertical axis. Marks show log-price residuals on a
+			diverging orange-to-purple scale: orange means lower price than predicted by weight,
+			purple means higher price than predicted, and neutral at zero means priced as predicted.
+			The symmetric colour domain is -1.5083 to +1.5083, at 12% opacity.
 		</desc>
 		<g fill-opacity="0.12">
 			{#each data as diamond}
-				<circle cx={x(diamond.carat)} cy={y(diamond.price)} r="1.5" fill={colourByClarity[diamond.clarity]}>
-					<title>Clarity: {diamond.clarity}; weight: {diamond.carat} carats; price: ${diamond.price.toLocaleString('en-US')}</title>
+				<circle cx={x(diamond.carat)} cy={y(diamond.price)} r="1.5" fill={colourByResidual(diamond.price_resid)}>
+					<title>Log-price residual: {diamond.price_resid.toFixed(4)} ({diamond.price_resid < 0 ? 'Lower price than predicted' : diamond.price_resid > 0 ? 'Higher price than predicted' : 'Priced as predicted'}); weight: {diamond.carat} carats; price: ${diamond.price.toLocaleString('en-US')}</title>
 				</circle>
 			{/each}
 		</g>
@@ -52,12 +55,15 @@
 	</svg>
 	<figcaption>
 		<div>{data.length.toLocaleString('en-US')} stones · Linear axes</div>
-		<p>Clarity: lowest → highest</p>
-		<ul aria-label="Clarity legend, lowest to highest">
-			{#each clarityRanks as rank}
-				<li><span class="swatch" style:background-color={colourByClarity[rank]}></span>{rank}{rank === 'I1' ? ' (worst)' : rank === 'IF' ? ' (best)' : ''}</li>
-			{/each}
-		</ul>
+		<div class="legend" aria-label="Log-price residual colour legend">
+			<p>Log-price residual (relative to weight)</p>
+			<div class="colour-bar" style:background={legendGradient}></div>
+			<div class="legend-labels">
+				<div>−1.5083<br />Lower price than predicted</div>
+				<div class="midpoint"><strong>0</strong><br />Priced as predicted</div>
+				<div>+1.5083<br />Higher price than predicted</div>
+			</div>
+		</div>
 	</figcaption>
 </figure>
 
@@ -67,7 +73,10 @@
 	text { fill: currentColor; font-size: 14px; }
 	figcaption { margin-top: 12px; font-size: 14px; color: #52616e; }
 	p { margin: 12px 0 8px; }
-	ul { display: flex; flex-wrap: wrap; gap: 12px; list-style: none; padding: 0; margin: 0; }
-	li { display: flex; align-items: center; gap: 5px; }
-	.swatch { display: inline-block; width: 18px; height: 18px; border: 1px solid #718096; }
+	.legend { max-width: 640px; }
+	.colour-bar { position: relative; height: 18px; border: 1px solid #718096; }
+	.colour-bar::after { content: ''; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: #202c36; transform: translateX(-50%); }
+	.legend-labels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+	.midpoint { text-align: center; }
+	.legend-labels > :last-child { text-align: right; }
 </style>
